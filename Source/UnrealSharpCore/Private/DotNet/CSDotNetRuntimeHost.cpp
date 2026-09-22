@@ -1,6 +1,11 @@
 #include "DotNet/CSDotNetRuntimeHost.h"
 
 #include "CSBindsRegistry.h"
+#include "CSUnrealSharpSettings.h"
+#include "CSManagedCallbacksCache.h"
+#include "dn2cpp_unrealsharp_abi.h"
+#include "Misc/EngineVersion.h"
+#include "Containers/Ticker.h"
 #include "UnrealSharpCore.h"
 #include "CSDotnetUtilties.h"
 #include "CSManagedPluginCallbacks.h"
@@ -8,8 +13,60 @@
 #include "HAL/PlatformProcess.h"
 #include "Misc/Paths.h"
 #include "Logging/StructuredLog.h"
+#include <cstdio>
 
 using namespace UnrealSharp;
+
+namespace
+{
+    decltype(&dn2cpp_unrealsharp_register_assembly) RegisterAssembly = nullptr;
+    decltype(&dn2cpp_unrealsharp_tick) TickRuntime = nullptr;
+    decltype(&dn2cpp_unrealsharp_shutdown) ShutdownRuntime = nullptr;
+    FTSTicker::FDelegateHandle TickHandle;
+}
+
+bool FCSDotNetRuntimeHost::UsesDn2Cpp()
+{
+#if WITH_EDITOR
+    return false;
+#else
+    return GetDefault<UCSUnrealSharpSettings>()->PackagingBackend == ECSPackagingBackend::Dn2Cpp;
+#endif
+}
+
+bool FCSDotNetRuntimeHost::RegisterNativeAssembly(const FString& Name)
+{
+    Dn2CppUnrealSharpResult Result{};
+    if (!RegisterAssembly || RegisterAssembly(TCHAR_TO_UTF8(*Name), &Result) == 0 || !Result.success)
+    {
+        const FString ErrorMessage = UTF8_TO_TCHAR(Result.error);
+        UE_LOGFMT(LogUnrealSharp, Error, "Native assembly registration failed: {0}", ErrorMessage);
+        std::fprintf(stderr, "Native assembly registration failed: %.*s\n", static_cast<int>(sizeof(Result.error)), Result.error);
+        std::fflush(stderr);
+        return false;
+    }
+    return true;
+}
+
+bool FCSDotNetRuntimeHost::CompleteNativeStartup()
+{
+    if (!bNativeRuntime)
+    {
+        return true;
+    }
+    // The lifecycle export rejects Ready until every compiled assembly registered.
+    Dn2CppUnrealSharpResult Result{};
+    if (!TickRuntime || TickRuntime(0.0f, &Result) == 0 || !Result.success)
+    {
+        const FString ErrorMessage = UTF8_TO_TCHAR(Result.error);
+        UE_LOGFMT(LogUnrealSharp, Error, "Native startup did not complete its assembly registry: {0}", ErrorMessage);
+        std::fprintf(stderr, "Native startup did not complete its assembly registry: %.*s\n", static_cast<int>(sizeof(Result.error)), Result.error);
+        std::fflush(stderr);
+        return false;
+    }
+    return true;
+}
+
 
 static_assert(sizeof(DotNetUtilities::FHostChar) == sizeof(char_t), "FHostChar does not match hostfxr's char_t.");
 
@@ -20,7 +77,66 @@ FCSDotNetRuntimeHost::~FCSDotNetRuntimeHost()
 
 bool FCSDotNetRuntimeHost::InitializeManagedRuntime()
 {
-	load_assembly_and_get_function_pointer_fn LoadAssemblyAndGetFunctionPointer = InitializeHost();
+    if (UsesDn2Cpp())
+    {
+        bNativeRuntime = true;
+#if PLATFORM_MAC && PLATFORM_CPU_ARM_FAMILY
+        const FString Library = FPaths::Combine(FPaths::ProjectDir(), TEXT("Binaries/Mac/libUnrealSharpGame.dylib"));
+        RuntimeHost = FPlatformProcess::GetDllHandle(*Library);
+        decltype(&dn2cpp_unrealsharp_initialize) Initialize = nullptr;
+        if (!RuntimeHost || !BindExport(Initialize, TEXT("dn2cpp_unrealsharp_initialize")) ||
+            !BindExport(RegisterAssembly, TEXT("dn2cpp_unrealsharp_register_assembly")) ||
+            !BindExport(TickRuntime, TEXT("dn2cpp_unrealsharp_tick")) ||
+            !BindExport(ShutdownRuntime, TEXT("dn2cpp_unrealsharp_shutdown")))
+        {
+            UE_LOGFMT(LogUnrealSharp, Error, "Missing dn2cpp runtime or exports: {0}", Library);
+            std::fprintf(stderr, "Missing dn2cpp runtime or exports: %.4096s\n", TCHAR_TO_UTF8(*Library));
+            std::fflush(stderr);
+            return false;
+        }
+        const FTCHARToUTF8 Directory(*FPaths::ConvertRelativePathToFull(Paths::GetUserAssemblyDirectory()));
+        Dn2CppUnrealSharpHost Host{};
+        Host.abi_version = DN2CPP_UNREALSHARP_ABI_VERSION;
+        Host.struct_size = sizeof(Host);
+        Host.ue_major = ENGINE_MAJOR_VERSION;
+        Host.ue_minor = ENGINE_MINOR_VERSION;
+        Host.ue_patch = ENGINE_PATCH_VERSION;
+        Host.unrealsharp_revision = DN2CPP_UNREALSHARP_REVISION;
+        Host.working_directory = const_cast<char*>(Directory.Get());
+        Host.plugin_callbacks = &GetManagedPluginCallbacks();
+        Host.binds_callbacks = reinterpret_cast<void*>(&FCSBindsRegistry::GetBoundFunction);
+        Host.managed_callbacks = &GetManagedCallbacks();
+        Host.plugin_callbacks_size = sizeof(GetManagedPluginCallbacks());
+        Host.managed_callbacks_size = sizeof(GetManagedCallbacks());
+        Dn2CppUnrealSharpResult Result{};
+        if (Initialize(&Host, &Result) == 0 || !Result.success)
+        {
+            const FString ErrorMessage = UTF8_TO_TCHAR(Result.error);
+            UE_LOGFMT(LogUnrealSharp, Error, "Native initialization failed: {0}", ErrorMessage);
+            std::fprintf(stderr, "Native initialization failed: %.*s\n", static_cast<int>(sizeof(Result.error)), Result.error);
+            std::fflush(stderr);
+            return false;
+        }
+        TickHandle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateLambda([](float Delta)
+        {
+            Dn2CppUnrealSharpResult TickResult{};
+            if (TickRuntime(Delta, &TickResult) == 0 || !TickResult.success)
+            {
+                const FString ErrorMessage = UTF8_TO_TCHAR(TickResult.error);
+                UE_LOGFMT(LogUnrealSharp, Error, "Native tick failed: {0}", ErrorMessage);
+                std::fprintf(stderr, "Native tick failed: %.*s\n", static_cast<int>(sizeof(TickResult.error)), TickResult.error);
+                std::fflush(stderr);
+                return false;
+            }
+            return true;
+        }));
+        return true;
+#else
+        UE_LOGFMT(LogUnrealSharp, Error, "dn2cpp packaging requires Mac arm64.");
+        return false;
+#endif
+    }
+    load_assembly_and_get_function_pointer_fn LoadAssemblyAndGetFunctionPointer = InitializeHost();
 	if (!LoadAssemblyAndGetFunctionPointer)
 	{
 		UE_LOGFMT(LogUnrealSharp, Fatal, "Failed to initialize Runtime Host. Check logs for more details.");
@@ -49,6 +165,20 @@ bool FCSDotNetRuntimeHost::InitializeManagedRuntime()
 		UE_LOGFMT(LogUnrealSharp, Fatal, "Failed to load assembly '{0}'. hostfxr error code: {1}", UnrealSharpLibraryAssembly, ErrorCode);
 	}
 
+    const FString ShutdownFunctionName = TEXT("ShutdownUnrealSharp");
+    DotNetUtilities::FHostStringConversion ShutdownFunctionConv = StringCast<DotNetUtilities::FHostChar>(*ShutdownFunctionName);
+    const int32 ShutdownErrorCode = LoadAssemblyAndGetFunctionPointer(
+        reinterpret_cast<const char_t*>(AssemblyPathConv.Get()),
+        reinterpret_cast<const char_t*>(EntryPointClassConv.Get()),
+        reinterpret_cast<const char_t*>(ShutdownFunctionConv.Get()),
+        UNMANAGEDCALLERSONLY_METHOD,
+        nullptr,
+        reinterpret_cast<void**>(&ShutdownUnrealSharp));
+    if (ShutdownErrorCode != 0 || !ShutdownUnrealSharp)
+    {
+        UE_LOGFMT(LogUnrealSharp, Fatal, "Failed to load shutdown entry point from '{0}'. hostfxr error code: {1}", UnrealSharpLibraryAssembly, ShutdownErrorCode);
+    }
+
 	const FTCHARToUTF8 WorkingDirectoryUtf8(*UserWorkingDirectory);
 
 	FCSInitializationResult InitializationResult;
@@ -62,7 +192,8 @@ bool FCSDotNetRuntimeHost::InitializeManagedRuntime()
 
 	if (!InitializationResult.bSuccess)
 	{
-		UE_LOGFMT(LogUnrealSharp, Fatal, "Failed to initialize UnrealSharp! Exception:\n{0}", InitializationResult.Message);
+		const FString ErrorMessage = UTF8_TO_TCHAR(InitializationResult.Message);
+		UE_LOGFMT(LogUnrealSharp, Fatal, "Failed to initialize UnrealSharp! Exception:\n{0}", ErrorMessage);
 	}
 
 #if !(UE_BUILD_SHIPPING)
@@ -77,6 +208,40 @@ bool FCSDotNetRuntimeHost::InitializeManagedRuntime()
 
 void FCSDotNetRuntimeHost::ShutdownManagedRuntime()
 {
+    if (bNativeRuntime)
+    {
+        FTSTicker::GetCoreTicker().RemoveTicker(TickHandle);
+        if (ShutdownRuntime)
+        {
+            Dn2CppUnrealSharpResult Result{};
+            if (ShutdownRuntime(&Result) == 0 || !Result.success)
+            {
+                const FString ErrorMessage = UTF8_TO_TCHAR(Result.error);
+                UE_LOGFMT(LogUnrealSharp, Error, "Native shutdown failed: {0}", ErrorMessage);
+                // Shipping may compile out UE logging; shutdown failures must remain observable.
+                std::fprintf(stderr, "Native shutdown failed: %.*s\n", static_cast<int>(sizeof(Result.error)), Result.error);
+                std::fflush(stderr);
+            }
+            ShutdownRuntime = nullptr;
+        }
+        TickRuntime = nullptr;
+        RegisterAssembly = nullptr;
+        // Managed function pointers remain valid until process exit.
+        RuntimeHost = nullptr;
+        return;
+    }
+    if (ShutdownUnrealSharp)
+    {
+        FCSInitializationResult Result{};
+        ShutdownUnrealSharp(&Result);
+        if (!Result.bSuccess)
+        {
+            const FString ErrorMessage = UTF8_TO_TCHAR(Result.Message);
+            UE_LOGFMT(LogUnrealSharp, Error, "Managed shutdown failed: {0}", ErrorMessage);
+            return;
+        }
+        ShutdownUnrealSharp = nullptr;
+    }
 	if (RuntimeHost)
 	{
 		FPlatformProcess::FreeDllHandle(RuntimeHost);
@@ -199,8 +364,8 @@ load_assembly_and_get_function_pointer_fn FCSDotNetRuntimeHost::ConfigureRuntime
 
 	hostfxr_initialize_parameters InitializeParameters;
 	InitializeParameters.size = sizeof(hostfxr_initialize_parameters);
-	InitializeParameters.host_path = HostPathConv.Get();
-	InitializeParameters.dotnet_root = DotNetRootConv.Get();
+	InitializeParameters.host_path = reinterpret_cast<const char_t*>(HostPathConv.Get());
+	InitializeParameters.dotnet_root = reinterpret_cast<const char_t*>(DotNetRootConv.Get());
 
 	hostfxr_handle HostFXR_Handle = nullptr;
 	int32 ErrorCode;
@@ -208,7 +373,7 @@ load_assembly_and_get_function_pointer_fn FCSDotNetRuntimeHost::ConfigureRuntime
 	if (Layout.bSelfContained)
 	{
 		DotNetUtilities::FHostStringConversion AppAssemblyConv = StringCast<DotNetUtilities::FHostChar>(*Layout.AppAssemblyPath);
-		const char_t* Args[] = { (AppAssemblyConv.Get()) };
+		const char_t* Args[] = { reinterpret_cast<const char_t*>(AppAssemblyConv.Get()) };
 		ErrorCode = Hostfxr_InitForCommandLine(UE_ARRAY_COUNT(Args), Args, &InitializeParameters, &HostFXR_Handle);
 	}
 	else

@@ -13,7 +13,7 @@ bool FCSMetaDataEntry::Serialize(FConstObject JsonObject)
 	END_JSON_SERIALIZE
 }
 
-void FCSTypeReferenceReflectionData::SerializeFromJsonString(TCHAR* RawJsonString)
+void FCSTypeReferenceReflectionData::SerializeFromJsonString(const TCHAR* RawJsonString)
 {
 	TRACE_CPUPROFILER_EVENT_SCOPE(FCSTypeReferenceReflectionData::StartSerializeFromJson);
 	

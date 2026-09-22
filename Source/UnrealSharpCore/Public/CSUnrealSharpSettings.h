@@ -4,6 +4,9 @@
 #include "Engine/DeveloperSettings.h"
 #include "CSUnrealSharpSettings.generated.h"
 
+UENUM()
+enum class ECSPackagingBackend : uint8 { Clr, Dn2Cpp };
+
 UCLASS(config = UnrealSharp, defaultconfig, meta = (DisplayName = "UnrealSharp Settings"))
 class UNREALSHARPCORE_API UCSUnrealSharpSettings : public UDeveloperSettings
 {
@@ -12,6 +15,9 @@ class UNREALSHARPCORE_API UCSUnrealSharpSettings : public UDeveloperSettings
 public:
 
 	UCSUnrealSharpSettings();
+
+	UPROPERTY(EditDefaultsOnly, config, Category = "UnrealSharp | Packaging")
+	ECSPackagingBackend PackagingBackend = ECSPackagingBackend::Clr;
 
 #if WITH_EDITOR
 	// UObject interface

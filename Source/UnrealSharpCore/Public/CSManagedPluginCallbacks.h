@@ -11,8 +11,4 @@ struct FCSManagedPluginCallbacks
 	UnloadPluginCallback UnloadPlugin = nullptr;
 };
 
-inline FCSManagedPluginCallbacks& GetManagedPluginCallbacks() 
-{
-	static FCSManagedPluginCallbacks Instance;
-	return Instance;
-}
+UNREALSHARPCORE_API FCSManagedPluginCallbacks& GetManagedPluginCallbacks();

@@ -26,9 +26,9 @@ DECLARE_UNREALSHARP_BINDER(Bind_UClass)
 
 	UFunction* GetNativeFunctionFromInstanceAndName(const UObject* NativeObject, const char* FunctionName)
 	{
-		if (!IsValid(NativeObject))
+		if (!IsValid(NativeObject) || !FunctionName)
 		{
-			UE_LOGFMT(LogUnrealSharp, Warning, "Failed to get NativeFunction. NativeObject is not valid. ObjectName: {0}", *NativeObject->GetName());
+			UE_LOGFMT(LogUnrealSharp, Warning, "Failed to get NativeFunction: object or function name is invalid.");
 			return nullptr;
 		}
 		
@@ -37,14 +37,21 @@ DECLARE_UNREALSHARP_BINDER(Bind_UClass)
 
 	UFunction* GetFirstNativeImplementationFromInstanceAndName(const UObject* NativeObject, const char* FunctionName)
 	{
-		if (!IsValid(NativeObject))
+		if (!IsValid(NativeObject) || !FunctionName)
 		{
-			UE_LOGFMT(LogUnrealSharp, Warning, "Failed to get NativeFunction. NativeObject is not valid. ObjectName: {0}", *NativeObject->GetName());
+			UE_LOGFMT(LogUnrealSharp, Warning, "Failed to get native implementation: object or function name is invalid.");
 			return nullptr;
 		}
 		
 		const UClass* FirstNativeClass = FCSClassUtilities::GetFirstNativeClass(NativeObject->GetClass());
-		return FirstNativeClass->FindFunctionByName(FunctionName);
+        UFunction* Function = IsValid(FirstNativeClass) ? FirstNativeClass->FindFunctionByName(FunctionName) : nullptr;
+        if (!Function)
+        {
+            const FString FunctionText = UTF8_TO_TCHAR(FunctionName);
+            UE_LOGFMT(LogUnrealSharp, Error, "Native implementation lookup failed: Object={0}, Class={1}, NativeClass={2}, Name={3}",
+                NativeObject->GetPathName(), NativeObject->GetClass()->GetPathName(), GetPathNameSafe(FirstNativeClass), FunctionText);
+        }
+        return Function;
 	}
 
 	void* GetDefault(UClass* Class)

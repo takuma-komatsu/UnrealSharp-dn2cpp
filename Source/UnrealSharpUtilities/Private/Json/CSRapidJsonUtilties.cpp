@@ -157,12 +157,11 @@ namespace UnrealSharp::RapidJson
 		}
 	}
 
-	bool ParseJsonString(TCHAR* JsonText, FDocument& OutDocument)
+	bool ParseJsonString(const TCHAR* JsonText, FDocument& OutDocument)
 	{
-		rapidjson::GenericInsituStringStream<FEncoding> Stream(JsonText);
-
+		// Managed strings can reside in read-only native literal storage.
 		FDocument Result;
-		Result.ParseStream<rapidjson::kParseInsituFlag>(Stream);
+		Result.Parse(JsonText);
 
 		if (Result.HasParseError())
 		{

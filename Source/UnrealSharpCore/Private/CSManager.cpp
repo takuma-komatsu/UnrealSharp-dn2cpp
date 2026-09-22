@@ -1,4 +1,4 @@
-﻿#include "CSManager.h"
+#include "CSManager.h"
 #include "CSManagedGCHandle.h"
 #include "CSManagedAssembly.h"
 #include "UnrealSharpCore.h"
@@ -18,6 +18,16 @@
 #endif
 
 UCSManager* UCSManager::Instance = nullptr;
+
+UCSManager& UCSManager::Get()
+{
+	if (!Instance)
+	{
+		check(IsInGameThread());
+		Instance = NewObject<UCSManager>(GetTransientPackage(), "CSManager", RF_Public | RF_MarkAsRootSet);
+	}
+	return *Instance;
+}
 
 void UCSManager::Initialize()
 {
@@ -154,7 +164,11 @@ void UCSManager::InitialAssemblyLoad()
 		
 		for (const FString& Path : Manifest.AssemblyPaths)
 		{
-			LoadAssemblyByPath(Path, Manifest.bCollectible);
+            if (!LoadAssemblyByPath(Path, Manifest.bCollectible))
+            {
+                UE_LOGFMT(LogUnrealSharp, Fatal, "Required assembly failed to register: {0}", Path);
+                return;
+            }
 		}
 	}
 }
