@@ -56,6 +56,7 @@ private:
 	void AddDirectoryToWatch(const FString& Directory, FName ProjectName);
 	
 	void HandleScriptFileChanges(const TArray<FFileChangeData>& ChangedFiles, FName ProjectName);
+	void ProcessScriptFileChanges(const TArray<FFileChangeData>& ChangedFiles, FName ProjectName);
 
 	static void OnHotReloadReady_Callback();
 	void OnHotReloadReady();
