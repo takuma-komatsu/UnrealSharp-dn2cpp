@@ -10,6 +10,11 @@
     <DefineConstants>$(DefineConstants);$(WithTargetType);$(WithBuildConfig)</DefineConstants>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(PackagingBackend)' == 'Dn2Cpp'">
+    <DefineConstants>$(DefineConstants);DN2CPP</DefineConstants>
+    <DefaultItemExcludes>$(DefaultItemExcludes);bin/**;obj/**</DefaultItemExcludes>
+  </PropertyGroup>
+
   <PropertyGroup Condition="'$(BuildingAOT)' == 'true'">
     <DefineConstants>$(DefineConstants);NATIVE_AOT</DefineConstants>
   </PropertyGroup>

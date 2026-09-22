@@ -60,7 +60,7 @@ public static class DotNetUtilities
 				string Candidate = Path.Combine(DotnetRoot, DotnetExe);
 				if (File.Exists(Candidate) && !IsUnrealBundledDotNet(Candidate))
 				{
-					_cachedExecutable = Candidate;
+					_cachedExecutable = File.ResolveLinkTarget(Candidate, true)?.FullName ?? Candidate;
 					return _cachedExecutable;
 				}
 			}
@@ -84,7 +84,7 @@ public static class DotNetUtilities
 						continue;
 					}
 
-					_cachedExecutable = Candidate;
+					_cachedExecutable = File.ResolveLinkTarget(Candidate, true)?.FullName ?? Candidate;
 					return _cachedExecutable;
 				}
 			}
@@ -95,7 +95,7 @@ public static class DotNetUtilities
 			{
 				if (File.Exists(Fallback) && !IsUnrealBundledDotNet(Fallback))
 				{
-					_cachedExecutable = Fallback;
+					_cachedExecutable = File.ResolveLinkTarget(Fallback, true)?.FullName ?? Fallback;
 					return _cachedExecutable;
 				}
 			}

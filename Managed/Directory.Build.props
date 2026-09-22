@@ -1,5 +1,11 @@
 <Project>
+  <PropertyGroup Condition="'$(PackagingBackend)' == 'Dn2Cpp'">
+    <DefineConstants>$(DefineConstants);DN2CPP</DefineConstants>
+    <BaseOutputPath>bin/Dn2Cpp/$(UETargetType)/$(UEBuildConfig)/</BaseOutputPath>
+    <BaseIntermediateOutputPath>obj/Dn2Cpp/$(UETargetType)/$(UEBuildConfig)/</BaseIntermediateOutputPath>
+    <DefaultItemExcludes>$(DefaultItemExcludes);bin/**;obj/**</DefaultItemExcludes>
+  </PropertyGroup>
   <PropertyGroup>
-    <OutputPath Condition="'$(UseDefaultOutputPath)' != 'true'">$(SolutionDir)..\..\Binaries\Managed\</OutputPath>
+    <OutputPath Condition="'$(UseDefaultOutputPath)' != 'true' and '$(PackagingBackend)' != 'Dn2Cpp'">$(SolutionDir)..\..\Binaries\Managed\</OutputPath>
   </PropertyGroup>
 </Project>

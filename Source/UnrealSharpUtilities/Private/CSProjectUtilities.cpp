@@ -58,7 +58,7 @@ void UnrealSharp::Project::DiscoverLoadOrderManifests(TArray<FCSLoadOrderManifes
 
 	OutManifests.Sort([](const FCSLoadOrderManifest& A, const FCSLoadOrderManifest& B)
 	{
-		return A.Priority > B.Priority;
+		return A.Priority == B.Priority ? A.Name.Compare(B.Name, ESearchCase::CaseSensitive) < 0 : A.Priority > B.Priority;
 	});
 }
 
