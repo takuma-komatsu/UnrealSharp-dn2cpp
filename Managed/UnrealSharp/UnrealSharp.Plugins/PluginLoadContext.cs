@@ -1,3 +1,4 @@
+#if !DN2CPP
 using System.Reflection;
 using System.Runtime.Loader;
 using System.IO;
@@ -53,3 +54,4 @@ public class PluginLoadContext : AssemblyLoadContext
         return newAssembly;
     }
 }
+#endif

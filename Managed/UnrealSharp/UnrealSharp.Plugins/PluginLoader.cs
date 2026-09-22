@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using UnrealSharp.Engine.Core.Modules;
@@ -11,6 +11,9 @@ public static class PluginLoader
 
 	public static Assembly? LoadPlugin(string assemblyPath, bool isCollectible)
 	{
+#if DN2CPP
+        return Dn2CppBootstrap.FindAssembly(Path.GetFileNameWithoutExtension(assemblyPath));
+#else
 		try
 		{
 			AssemblyName assemblyName = new AssemblyName(Path.GetFileNameWithoutExtension(assemblyPath));
@@ -38,8 +41,10 @@ public static class PluginLoader
 		}
 
 		return null;
+#endif
 	}
 
+#if !DN2CPP
 	[MethodImpl(MethodImplOptions.NoInlining)]
 	private static WeakReference? RemovePlugin(string assemblyName)
 	{
@@ -105,6 +110,19 @@ public static class PluginLoader
 			LogUnrealSharpPlugins.LogError($"An error occurred while unloading the plugin: {exception}");
 		}
 	}
+
+#endif
+
+#if DN2CPP
+    internal static void ClearStaticAssemblies() => Plugins.Clear();
+
+    internal static Plugin RegisterStaticAssembly(Assembly assembly)
+    {
+        Plugin plugin = new Plugin(assembly);
+        Plugins.Add(assembly.GetName().Name!, plugin);
+        return plugin;
+    }
+#endif
 
 	public static Plugin? FindPlugin(Type type)
 	{

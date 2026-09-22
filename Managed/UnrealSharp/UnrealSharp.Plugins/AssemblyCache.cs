@@ -1,3 +1,4 @@
+#if !DN2CPP
 using System.Reflection;
 using System.Runtime.Loader;
 using UnrealSharp.Binds;
@@ -96,3 +97,4 @@ public static class AssemblyCache
 		return fallbackCandidate;
 	}
 }
+#endif

@@ -14,6 +14,7 @@ internal unsafe struct FCSInitializationResult
     public fixed byte Message[MessageCapacity];
 }
 
+#if !DN2CPP
 internal static class Main
 {
     [UnmanagedCallersOnly]
@@ -36,6 +37,22 @@ internal static class Main
             PluginsCallbacks.Initialize(pluginCallbacks);
             ManagedCallbacks.Initialize(managedCallbacks);
             NativeBinds.Initialize(bindsCallbacks);
+            NativeCallbackGate.Open();
+            result->Success = NativeBool.True;
+        }
+        catch (Exception exception)
+        {
+            result->Success = NativeBool.False;
+            WriteMessage((nint)result->Message, exception.ToString());
+        }
+    }
+
+    [UnmanagedCallersOnly]
+    private static unsafe void ShutdownUnrealSharp(FCSInitializationResult* result)
+    {
+        try
+        {
+            NativeCallbackGate.Close(5000);
             result->Success = NativeBool.True;
         }
         catch (Exception exception)
@@ -73,3 +90,5 @@ internal static class Main
     }
 #endif
 }
+
+#endif

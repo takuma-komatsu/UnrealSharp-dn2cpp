@@ -1,4 +1,5 @@
-﻿using System.Reflection;
+#if !DN2CPP
+using System.Reflection;
 using System.Runtime.InteropServices;
 
 namespace UnrealSharp.Plugins;
@@ -48,3 +49,4 @@ public class UnrealSharpDllImportResolver(IntPtr internalHandle)
         public static extern IntPtr GetModuleHandle(IntPtr lpModuleName);
     }
 }
+#endif
