@@ -15,7 +15,6 @@ void FUnrealSharpCoreModule::StartupModule()
 #if WITH_EDITOR
 	if (!UnrealSharp::DotNetUtilities::VerifyCSharpEnvironment() || !UnrealSharp::DotNetUtilities::BuildUserSolution())
 	{
-		StartupModule();
 		return;
 	}
 #endif
