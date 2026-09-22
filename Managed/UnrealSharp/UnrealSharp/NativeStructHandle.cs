@@ -5,10 +5,10 @@ using UnrealSharp.Interop;
 
 namespace UnrealSharp;
 
-[InlineArray(64)]
+[StructLayout(LayoutKind.Sequential, Size = 64)]
 public struct NativeStructHandleData
 {
-    private byte _data;
+    private nint _alignment;
 }
 
 public sealed class NativeStructHandle : IDisposable

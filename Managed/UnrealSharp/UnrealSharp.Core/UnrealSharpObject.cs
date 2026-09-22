@@ -1,4 +1,4 @@
-﻿using System.Reflection;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
@@ -20,12 +20,18 @@ public class UnrealSharpObject : IDisposable
             return IntPtr.Zero;
         }
             
+#if !DN2CPP
         delegate*<object, void> foundConstructor = (delegate*<object, void>) foundDefaultCtor.MethodHandle.GetFunctionPointer();
+#endif
             
         UnrealSharpObject createdObject = (UnrealSharpObject) RuntimeHelpers.GetUninitializedObject(typeToCreate);
         createdObject.NativeObject = nativeObjectPtr;
             
+#if DN2CPP
+        ((MethodBase)foundDefaultCtor).Invoke(createdObject, Array.Empty<object>());
+#else
         foundConstructor(createdObject);
+#endif
             
         return GCHandle.ToIntPtr(GCHandleUtilities.AllocateStrongPointer(createdObject, typeToCreate.Assembly));
     }
