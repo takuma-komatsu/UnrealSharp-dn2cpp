@@ -77,6 +77,7 @@ public class PackageProject : BuildCommand
             process.StartInfo.UseShellExecute = false;
             foreach (string argument in new[] { script, "--dn2cpp-root", options.Dn2CppRoot!, "--managed", PublishFolder,
                 "--archive", options.ArchiveDirectory, "--work", work, "--configuration", options.BuildConfiguration.ToString(),
+                "--platform", options.TargetPlatform.ToString(),
                 "--unrealsharp-config", Path.Combine(this.GetProjectRootFolder(), "Config", "DefaultUnrealSharp.ini") })
             {
                 process.StartInfo.ArgumentList.Add(argument);
@@ -104,7 +105,9 @@ public class PackageProject : BuildCommand
         UnrealTargetPlatform TargetPlatform = string.IsNullOrEmpty(PlatformString) ? UnrealTargetPlatform.Win64 : UnrealTargetPlatform.Parse(PlatformString);
 
         string? ArchString = ParseOptionalStringParam("TargetArchitecture");
-        UnrealArch TargetArchitecture = string.IsNullOrEmpty(ArchString) ? UnrealArch.X64 : UnrealArch.Parse(ArchString);
+        UnrealArch TargetArchitecture = string.IsNullOrEmpty(ArchString)
+            ? (TargetPlatform == UnrealTargetPlatform.Android ? UnrealArch.Arm64 : UnrealArch.X64)
+            : UnrealArch.Parse(ArchString);
 
         bool NativeAot = ParseParam("NativeAOT");
 
@@ -137,10 +140,11 @@ public class PackageProject : BuildCommand
         {
             if (this.PackagingBackend() != "Dn2Cpp")
                 throw new ArgumentException("Set PackagingBackend=Dn2Cpp in DefaultUnrealSharp.ini before cooking; the runtime and package selection must agree.");
-            if (options.TargetPlatform != UnrealTargetPlatform.Mac || options.TargetArchitecture != UnrealArch.Arm64 ||
+            if ((options.TargetPlatform != UnrealTargetPlatform.Mac && options.TargetPlatform != UnrealTargetPlatform.Android) ||
+                options.TargetArchitecture != UnrealArch.Arm64 ||
                 options.TargetType != TargetType.Game || (options.BuildConfiguration != UnrealTargetConfiguration.Development &&
                 options.BuildConfiguration != UnrealTargetConfiguration.Shipping) || options.NativeAot)
-                throw new ArgumentException("dn2cpp requires Mac arm64 Game Development or Shipping without NativeAOT.");
+                throw new ArgumentException("dn2cpp requires Mac or Android arm64 Game Development or Shipping without NativeAOT.");
             if (string.IsNullOrEmpty(options.Dn2CppRoot) || !File.Exists(Path.Combine(options.Dn2CppRoot, "integrations", "unrealsharp", "package-native.py")))
                 throw new ArgumentException("Dn2CppRoot must point to the dn2cpp source checkout.");
             string bindings = PathUtilities.GetUhtGeneratedOutputPath(this.GetUnrealSharpRootFolder(), TargetType.Game);

@@ -20,8 +20,12 @@ public class StageUnrealSharp : BuildCommand
         string configuration = ParseParamValue("UEBuildConfig", nameof(UnrealTargetConfiguration.Development));
         string backend = target == nameof(TargetType.Editor) ? "Clr" : ParseParamValue("PackagingBackend", this.PackagingBackend());
         string projectRoot = this.GetProjectRootFolder();
+        string platform = ParseParamValue("TargetPlatform", string.Empty);
+        string nativeArchive = platform == "Android"
+            ? Path.Combine(this.GetUnrealSharpIntermediateDirectory(), "NativeStage", "Android", configuration)
+            : Path.Combine(this.GetUnrealSharpIntermediateDirectory(), "NativeStage", target, configuration, "arm64", Path.GetFileName(projectRoot));
         string archive = ParseParamValue("ArchiveDirectory", backend == "Dn2Cpp"
-            ? Path.Combine(this.GetUnrealSharpIntermediateDirectory(), "NativeStage", target, configuration, "arm64", Path.GetFileName(projectRoot))
+            ? nativeArchive
             : projectRoot);
         Directory.CreateDirectory(archive);
         List<KeyValuePair<string, string>> ActionArgs =
@@ -29,8 +33,8 @@ public class StageUnrealSharp : BuildCommand
             new("ArchiveDirectory", archive),
             new("UEBuildConfig", ParseParamValue("UEBuildConfig", nameof(UnrealTargetConfiguration.Development))),
             new("UETargetType", ParseParamValue("UETargetType", nameof(TargetType.Editor))),
-            new("TargetPlatform", ParseParamValue("TargetPlatform", string.Empty)),
-            new("TargetArchitecture", ParseParamValue("TargetArchitecture", string.Empty)),
+            new("TargetPlatform", platform),
+            new("TargetArchitecture", ParseParamValue("TargetArchitecture", platform == "Android" ? "arm64" : string.Empty)),
             new("PackagingBackend", ParseParamValue("UETargetType", nameof(TargetType.Editor)) == nameof(TargetType.Editor) ? "Clr" : ParseParamValue("PackagingBackend", this.PackagingBackend())),
             new("Dn2CppRoot", ParseParamValue("Dn2CppRoot", Environment.GetEnvironmentVariable("DN2CPP_ROOT") ?? string.Empty))
         ];

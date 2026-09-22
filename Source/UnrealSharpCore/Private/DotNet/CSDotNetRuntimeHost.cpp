@@ -82,6 +82,10 @@ bool FCSDotNetRuntimeHost::InitializeManagedRuntime()
         bNativeRuntime = true;
 #if PLATFORM_MAC && PLATFORM_CPU_ARM_FAMILY
         const FString Library = FPaths::Combine(FPaths::ProjectDir(), TEXT("Binaries/Mac/libUnrealSharpGame.dylib"));
+#elif PLATFORM_ANDROID && PLATFORM_CPU_ARM_FAMILY
+        const FString Library = TEXT("libUnrealSharpGame.so");
+#endif
+#if (PLATFORM_MAC || PLATFORM_ANDROID) && PLATFORM_CPU_ARM_FAMILY
         RuntimeHost = FPlatformProcess::GetDllHandle(*Library);
         decltype(&dn2cpp_unrealsharp_initialize) Initialize = nullptr;
         if (!RuntimeHost || !BindExport(Initialize, TEXT("dn2cpp_unrealsharp_initialize")) ||
@@ -132,7 +136,7 @@ bool FCSDotNetRuntimeHost::InitializeManagedRuntime()
         }));
         return true;
 #else
-        UE_LOGFMT(LogUnrealSharp, Error, "dn2cpp packaging requires Mac arm64.");
+        UE_LOGFMT(LogUnrealSharp, Error, "dn2cpp packaging requires Mac or Android arm64.");
         return false;
 #endif
     }

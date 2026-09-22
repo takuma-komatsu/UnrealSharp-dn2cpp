@@ -46,6 +46,27 @@ public class UnrealSharpCore : ModuleRules
         PublicDefinitions.Add("ForceAsEngineGlue=1");
         PublicSystemIncludePaths.Add(Path.Combine(PluginDirectory, "Managed", "DotNetRuntime", "inc"));
 
+        if (Target.Platform == UnrealTargetPlatform.Android && Target.Type == TargetType.Game && Target.ProjectFile != null)
+        {
+            string NativeStage = Path.Combine(Target.ProjectFile.Directory.FullName, "Intermediate", "UnrealSharp", "NativeStage", "Android", Target.Configuration.ToString());
+            string ManagedStage = Path.Combine(NativeStage, "Binaries", "Managed", "net10.0");
+            if (Directory.Exists(ManagedStage))
+            {
+                foreach (string Manifest in Directory.GetFiles(ManagedStage, "*.LoadOrder.json"))
+                {
+                    RuntimeDependencies.Add(
+                        "$(ProjectDir)/Content/Dn2Cpp/Managed/net10.0/" + Path.GetFileName(Manifest),
+                        Manifest, StagedFileType.UFS);
+                }
+                string Flag = Path.Combine(ManagedStage, "UnrealSharpBuild.flag");
+                if (File.Exists(Flag))
+                {
+                    RuntimeDependencies.Add("$(ProjectDir)/Content/Dn2Cpp/Managed/net10.0/UnrealSharpBuild.flag", Flag, StagedFileType.UFS);
+                }
+            }
+            AdditionalPropertiesForReceipt.Add("AndroidPlugin", Path.Combine(PluginDirectory, "Source", "UnrealSharpCore", "UnrealSharpCore_Android_UPL.xml"));
+        }
+
 		if (Target.bBuildEditor)
 		{
 			PrivateDependencyModuleNames.AddRange(new string[]
