@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
 using AutomationTool;
+using UnrealBuildTool;
+using EpicGames.Core;
 
 namespace UnrealSharp.Automation.Utilities;
 
@@ -10,6 +12,18 @@ public static class UnrealSharpSettingsUtilities
 {
     private static Dictionary<string, JsonElement>? _config;
     
+    public static string PackagingBackend(this BuildCommand command)
+    {
+        List<ConfigFile> files = new();
+        foreach (string root in new[] { command.GetUnrealSharpRootFolder(), command.GetProjectRootFolder() })
+        {
+            string path = Path.Combine(root, "Config", "DefaultUnrealSharp.ini");
+            if (File.Exists(path)) files.Add(new ConfigFile(new FileReference(path)));
+        }
+        ConfigHierarchy config = new(files);
+        return config.GetString("/Script/UnrealSharpCore.CSUnrealSharpSettings", "PackagingBackend", out string backend) ? backend : "Clr";
+    }
+
     static void InitializeConfigFile(BuildCommand buildCommand)
     {
         if (_config != null)

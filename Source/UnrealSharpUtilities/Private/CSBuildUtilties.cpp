@@ -13,10 +13,14 @@
 
 #define LOCTEXT_NAMESPACE "UnrealSharpBuildUtilities"
 
-bool UnrealSharp::Build::InvokeUnrealSharpAutomation(const FString& BuildAction, const TMap<FString, FString>* ActionArgs, const FCSCommandError& OnError)
+bool UnrealSharp::Build::InvokeUnrealSharpAutomation(const FString& BuildAction, const TMap<FString, FString>* ActionArgs, const FCSCommandError& OnError, bool bWaitForUATMutex)
 {
 	FString Arguments;
 	BuildArguments(BuildAction, ActionArgs, Arguments);
+	if (bWaitForUATMutex)
+	{
+		Arguments += TEXT(" -WaitForUATMutex");
+	}
 
 	int32 ReturnCode = 0;
 	FString Output;
@@ -74,7 +78,7 @@ bool UnrealSharp::Build::BuildUserSolution(const FCSCommandError& OnError)
 		Arguments.Add(TEXT("clp"), TEXT("ErrorsOnly"));
 	}
 
-	return InvokeUnrealSharpAutomation(BuildAction::BuildUserSolution, &Arguments, OnError);
+	return InvokeUnrealSharpAutomation(BuildAction::BuildUserSolution, &Arguments, OnError, true);
 }
 
 void UnrealSharp::Build::BuildArguments(const FString& BuildAction, const TMap<FString, FString>* ActionArgs, FString& OutArgs)

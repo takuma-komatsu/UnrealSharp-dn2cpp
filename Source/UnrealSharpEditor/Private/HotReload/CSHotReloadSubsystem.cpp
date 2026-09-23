@@ -242,6 +242,16 @@ void UCSHotReloadSubsystem::OnStopPlayingPIE(bool IsSimulating)
 
 bool UCSHotReloadSubsystem::Tick(float DeltaTime)
 {
+	if (!bIsHotReloadPaused && !IsHotReloading() && !PendingFileChanges.IsEmpty())
+	{
+		TMap<FName, TArray<FFileChangeData>> FileChanges = MoveTemp(PendingFileChanges);
+		PendingFileChanges.Reset();
+		for (const TPair<FName, TArray<FFileChangeData>>& Pair : FileChanges)
+		{
+			ProcessScriptFileChanges(Pair.Value, Pair.Key);
+		}
+	}
+
 	if (FCSHotReloadUtilities::ShouldHotReloadOnEditorFocus(this))
 	{
 		PerformHotReload();
@@ -302,62 +312,58 @@ void UCSHotReloadSubsystem::ResumeHotReload()
 		PauseNotification.Reset();
 	}
 	
-	for (const TPair<FName, TArray<FFileChangeData>>& Pair : PendingFileChanges)
-	{
-		HandleScriptFileChanges(Pair.Value, Pair.Key);
-	}
 }
 
 void UCSHotReloadSubsystem::HandleScriptFileChanges(const TArray<FFileChangeData>& ChangedFiles, FName ProjectName)
 {
 	TRACE_CPUPROFILER_EVENT_SCOPE(UCSHotReloadSubsystem::HandleScriptFileChanges)
-	
-	if (IsHotReloading())
-	{
-		return;
-	}
-	
+
 	TArray<FFileChangeData> CSharpFiles;
 	FCSHotReloadUtilities::GetChangedCSharpFiles(ChangedFiles, CSharpFiles);
-	
-	if (CSharpFiles.IsEmpty())
+	if (!CSharpFiles.IsEmpty())
 	{
-		return;
+		// Directory watcher callbacks hold an internal lock. Process changes on a later tick.
+		AppendPendingFileChange(CSharpFiles, ProjectName);
 	}
-	
-	if (bIsHotReloadPaused)
-	{
-		AppendPendingFileChange(ChangedFiles, ProjectName);
-		return;
-	}
-	
+}
+
+void UCSHotReloadSubsystem::ProcessScriptFileChanges(const TArray<FFileChangeData>& ChangedFiles, FName ProjectName)
+{
+	TRACE_CPUPROFILER_EVENT_SCOPE(UCSHotReloadSubsystem::ProcessScriptFileChanges)
+
 	TArray<FCSHotReloadUtilities::FCSChangedFile> DirtiedFiles;
-	FCSHotReloadUtilities::CollectDirtiedFiles(CSharpFiles, DirtiedFiles);
-	
+	FCSHotReloadUtilities::CollectDirtiedFiles(ChangedFiles, DirtiedFiles);
 	if (DirtiedFiles.IsEmpty())
 	{
 		return;
 	}
-	
+
 	FString ExceptionMessage;
 	if (!FCSHotReloadUtilities::ApplyDirtiedFiles(ProjectName.ToString(), DirtiedFiles, ExceptionMessage))
 	{
-		FMessageDialog::Open(EAppMsgType::Ok, FText::FromString(ExceptionMessage), FText::FromString(TEXT("C# Hot Reload Error")));
+		UE_LOGFMT(LogUnrealSharpEditor, Error, "C# Hot Reload Error: {0}", *ExceptionMessage);
+		TSharedPtr<SNotificationItem> ErrorNotification = FCSEditorUtilities::MakeNotification(
+			UnrealSharp::Icons::GetUnrealSharpIcon(), TEXT("C# Hot Reload Error. See Output Log."));
+		if (ErrorNotification.IsValid())
+		{
+			ErrorNotification->SetCompletionState(SNotificationItem::CS_Fail);
+			ErrorNotification->ExpireAndFadeout();
+		}
 		return;
 	}
-	
+
 	UCSManagedAssembly* ModifiedAssembly = UCSManager::Get().FindAssembly(ProjectName);
 	if (!PendingModifiedAssemblies.Contains(ModifiedAssembly))
 	{
 		PendingModifiedAssemblies.Add(ModifiedAssembly);
 	}
-	
+
 	if (FCSHotReloadUtilities::ShouldDeferHotReloadRequest(ModifiedAssembly))
 	{
 		UE_LOGFMT(LogUnrealSharpEditor, Verbose, "Deferring hot reload request for assembly {0}.", *ModifiedAssembly->GetName());
 		return;
 	}
-	
+
 	PerformHotReload();
 }
 

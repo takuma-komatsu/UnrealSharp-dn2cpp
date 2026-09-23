@@ -32,7 +32,9 @@ public class PackageProject : BuildCommand
         UnrealTargetPlatform TargetPlatform,
         UnrealArch TargetArchitecture,
         bool NativeAot,
-        string[]? UserParams = null);
+        string[]? UserParams = null,
+        string PackagingBackend = "Clr",
+        string? Dn2CppRoot = null);
 
     public override void ExecuteBuild()
     {
@@ -47,17 +49,48 @@ public class PackageProject : BuildCommand
 
         DotNetSdkUtilities.CopyGlobalJson(this);
 
-        string PublishFolder = PathUtilities.BuildOutputPath(options.ArchiveDirectory);
+        bool native = options.PackagingBackend == "Dn2Cpp";
+        string work = Path.Combine(this.GetUnrealSharpIntermediateDirectory(), "Dn2Cpp", options.TargetType.ToString(), options.BuildConfiguration.ToString(), "arm64");
+        string PublishFolder = PathUtilities.BuildOutputPath(native ? work : options.ArchiveDirectory);
         CleanBuildArtifacts(PublishFolder);
 
         string RuntimeIdentifier = DotNetSdkUtilities.GetDotNetRuntimeIdentifier(options.TargetPlatform, options.TargetArchitecture);
         IList<string> Arguments = BuildBaseArguments(RuntimeIdentifier, options, PublishFolder);
 
-        BuildBindingsSolution(Arguments, options.BuildConfiguration);
+        BuildBindingsSolution(Arguments, options.BuildConfiguration, native);
+        Arguments.Add($"-p:UnrealSharpManagedReferenceDirectory={PublishFolder}");
+        if (native)
+        {
+            // Global properties are visible before SDK restore paths are evaluated.
+            string lane = $"Dn2Cpp/{options.TargetType}/{options.BuildConfiguration}/arm64/";
+            Arguments.Add($"-p:BaseOutputPath=bin/{lane}");
+            Arguments.Add($"-p:BaseIntermediateOutputPath=obj/{lane}");
+        }
         BuildUserBindings(PublishFolder, options, Arguments);
-        BuildUserSolution(PublishFolder, Arguments, options.BuildConfiguration, options.UserParams);
+        BuildUserSolution(PublishFolder, Arguments, options.BuildConfiguration, options.UserParams, native ? work : null);
         
-        EmitInstalledFlagFile(PublishFolder);
+        if (native)
+        {
+            string script = Path.Combine(options.Dn2CppRoot!, "integrations", "unrealsharp", "package-native.py");
+            using System.Diagnostics.Process process = new();
+            process.StartInfo.FileName = "python3";
+            process.StartInfo.UseShellExecute = false;
+            foreach (string argument in new[] { script, "--dn2cpp-root", options.Dn2CppRoot!, "--managed", PublishFolder,
+                "--archive", options.ArchiveDirectory, "--work", work, "--configuration", options.BuildConfiguration.ToString(),
+                "--platform", options.TargetPlatform.ToString(),
+                "--unrealsharp-config", Path.Combine(this.GetProjectRootFolder(), "Config", "DefaultUnrealSharp.ini") })
+            {
+                process.StartInfo.ArgumentList.Add(argument);
+            }
+            process.Start();
+            process.WaitForExit();
+            if (process.ExitCode != 0) throw new InvalidOperationException("dn2cpp native packaging failed.");
+
+        }
+        else
+        {
+            EmitInstalledFlagFile(PublishFolder);
+        }
 
         LoggerUtilities.LogUnrealSharpInfo($"Packaging complete. Published files: {PublishFolder}");
     }
@@ -72,13 +105,15 @@ public class PackageProject : BuildCommand
         UnrealTargetPlatform TargetPlatform = string.IsNullOrEmpty(PlatformString) ? UnrealTargetPlatform.Win64 : UnrealTargetPlatform.Parse(PlatformString);
 
         string? ArchString = ParseOptionalStringParam("TargetArchitecture");
-        UnrealArch TargetArchitecture = string.IsNullOrEmpty(ArchString) ? UnrealArch.X64 : UnrealArch.Parse(ArchString);
+        UnrealArch TargetArchitecture = string.IsNullOrEmpty(ArchString)
+            ? (TargetPlatform == UnrealTargetPlatform.Android ? UnrealArch.Arm64 : UnrealArch.X64)
+            : UnrealArch.Parse(ArchString);
 
         bool NativeAot = ParseParam("NativeAOT");
 
         string[] UserParams = ParseParamValues("UserParams");
 
-        return new PackagingOptions(ArchiveDirectory, TargetType, TargetConfiguration, TargetPlatform, TargetArchitecture, NativeAot, UserParams);
+        return new PackagingOptions(ArchiveDirectory, TargetType, TargetConfiguration, TargetPlatform, TargetArchitecture, NativeAot, UserParams, ParseParamValue("PackagingBackend", TargetType == UnrealBuildTool.TargetType.Editor ? "Clr" : this.PackagingBackend()), ParseOptionalStringParam("Dn2CppRoot") ?? Environment.GetEnvironmentVariable("DN2CPP_ROOT"));
     }
 
     private static void LogOptions(PackagingOptions options)
@@ -99,6 +134,23 @@ public class PackageProject : BuildCommand
 
     private void ValidateOptions(PackagingOptions options)
     {
+        if (options.PackagingBackend != "Clr" && options.PackagingBackend != "Dn2Cpp")
+            throw new ArgumentException("PackagingBackend must be Clr or Dn2Cpp.");
+        if (options.PackagingBackend == "Dn2Cpp")
+        {
+            if (this.PackagingBackend() != "Dn2Cpp")
+                throw new ArgumentException("Set PackagingBackend=Dn2Cpp in DefaultUnrealSharp.ini before cooking; the runtime and package selection must agree.");
+            if ((options.TargetPlatform != UnrealTargetPlatform.Mac && options.TargetPlatform != UnrealTargetPlatform.Android) ||
+                options.TargetArchitecture != UnrealArch.Arm64 ||
+                options.TargetType != TargetType.Game || (options.BuildConfiguration != UnrealTargetConfiguration.Development &&
+                options.BuildConfiguration != UnrealTargetConfiguration.Shipping) || options.NativeAot)
+                throw new ArgumentException("dn2cpp requires Mac or Android arm64 Game Development or Shipping without NativeAOT.");
+            if (string.IsNullOrEmpty(options.Dn2CppRoot) || !File.Exists(Path.Combine(options.Dn2CppRoot, "integrations", "unrealsharp", "package-native.py")))
+                throw new ArgumentException("Dn2CppRoot must point to the dn2cpp source checkout.");
+            string bindings = PathUtilities.GetUhtGeneratedOutputPath(this.GetUnrealSharpRootFolder(), TargetType.Game);
+            if (!Directory.Exists(bindings) || !Directory.EnumerateFiles(bindings, "*.cs", SearchOption.AllDirectories).Any())
+                throw new InvalidOperationException("Generate Game bindings with UBT before dn2cpp packaging.");
+        }
         ArgumentException.ThrowIfNullOrEmpty(options.ArchiveDirectory);
 
         if (!Directory.Exists(options.ArchiveDirectory))
@@ -165,8 +217,9 @@ public class PackageProject : BuildCommand
 
             "-p:UseDefaultOutputPath=true",
             
-            $"-p:PublishSelfContained={(options.NativeAot ? "false" : "true")}",
+            $"-p:PublishSelfContained={(options.NativeAot || options.PackagingBackend == "Dn2Cpp" ? "false" : "true")}",
 
+            $"-p:PackagingBackend={options.PackagingBackend}",
             $"-p:UETargetType={options.TargetType}",
             $"-p:UEBuildConfig={options.BuildConfiguration}",
 
@@ -174,13 +227,17 @@ public class PackageProject : BuildCommand
         ];
     }
 
-    private void BuildBindingsSolution(IList<string> arguments, UnrealTargetConfiguration buildConfig)
+    private void BuildBindingsSolution(IList<string> arguments, UnrealTargetConfiguration buildConfig, bool native)
     {
         string BindingsPath = Path.Combine(this.GetUnrealSharpRootFolder(), ManagedFolderName, BindingsProjectFolder);
+        if (native)
+        {
+            BindingsPath = Path.Combine(BindingsPath, "UnrealSharp.Plugins");
+        }
         BuildCommands.BuildSolution.RunBuild(BindingsPath, buildConfig, publish: true, arguments);
     }
 
-    private void BuildUserSolution(string publishFolder, IList<string> buildArguments, UnrealTargetConfiguration buildConfig, string[]? userParams)
+    private void BuildUserSolution(string publishFolder, IList<string> buildArguments, UnrealTargetConfiguration buildConfig, string[]? userParams, string? nativeWork)
     {
         string ScriptFolder = this.GetProjectScriptFolder();
 
@@ -194,9 +251,53 @@ public class PackageProject : BuildCommand
             }
         }
 
-        BuildCommands.BuildSolution.RunBuild(ScriptFolder, buildConfig, publish: true, BuildUserSolutionArguments);
-        
-        EmitUserLoadOrder(publishFolder);
+        if (nativeWork != null)
+        {
+            string records = Path.Combine(nativeWork, "UserProjectOutputs");
+            CleanBuildArtifacts(records);
+            Directory.CreateDirectory(records);
+            BuildUserSolutionArguments = new List<string>(BuildUserSolutionArguments)
+            {
+                $"-p:CustomAfterMicrosoftCommonTargets={Path.Combine(this.GetUnrealSharpRootFolder(), "Build", "Scripts", "Dn2Cpp.ProjectOutputs.targets")}",
+                $"-p:Dn2CppProjectOutputRecords={records}"
+            };
+            BuildCommands.BuildSolution.RunBuild(ScriptFolder, buildConfig, publish: true, BuildUserSolutionArguments);
+            PublishMissingRuntimeGlue(publishFolder, BuildUserSolutionArguments, buildConfig);
+            string[] assemblies = Directory.GetFiles(records, "*.txt")
+                .OrderBy(path => path, StringComparer.Ordinal)
+                .Select(path => File.ReadAllLines(path)[0].Trim()).ToArray();
+            if (assemblies.Distinct(StringComparer.OrdinalIgnoreCase).Count() != assemblies.Length)
+                throw new InvalidOperationException("Multiple built projects publish the same assembly name.");
+            if (assemblies.Length == 0)
+                throw new InvalidOperationException("Native user build did not record any runtime project outputs.");
+            foreach (string assembly in assemblies)
+                if (!File.Exists(Path.Combine(publishFolder, assembly)))
+                    throw new FileNotFoundException($"Required built project assembly was not published: {assembly}");
+            LoadOrderUtilities.TryEmitLoadOrder(assemblies, publishFolder, LoadOrderUtilities.UserLoadOrderName,
+                new LoadOrderOptions { Collectible = false, Priority = LoadOrderUtilities.UserLoadOrderPriority });
+        }
+        else
+        {
+            BuildCommands.BuildSolution.RunBuild(ScriptFolder, buildConfig, publish: true, BuildUserSolutionArguments);
+            PublishMissingRuntimeGlue(publishFolder, BuildUserSolutionArguments, buildConfig);
+            EmitUserLoadOrder(publishFolder);
+        }
+    }
+
+    private void PublishMissingRuntimeGlue(string publishFolder, IList<string> buildArguments, UnrealTargetConfiguration buildConfig)
+    {
+        foreach (FileInfo project in this.GetManagedProjectFiles()
+            .Where(file => file.Name.EndsWith(".RuntimeGlue.csproj", StringComparison.OrdinalIgnoreCase)
+                && !ProjectUtilities.IsEditorOnlyProject(file.FullName)))
+        {
+            string assembly = Path.GetFileNameWithoutExtension(project.Name) + ".dll";
+            if (File.Exists(Path.Combine(publishFolder, assembly)))
+                continue;
+
+            BuildCommands.BuildSolution.RunBuild(project.DirectoryName!, buildConfig, publish: true, buildArguments);
+            if (!File.Exists(Path.Combine(publishFolder, assembly)))
+                throw new FileNotFoundException($"Runtime glue project was not published: {project.FullName}");
+        }
     }
 
     private void BuildUserBindings(string publishFolder, PackagingOptions options, IList<string> buildArguments)

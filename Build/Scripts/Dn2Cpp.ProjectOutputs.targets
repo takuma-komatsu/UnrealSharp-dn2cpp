@@ -1,0 +1,17 @@
+<Project>
+  <!-- Build runs for the selected solution and its evaluated ProjectReference graph. -->
+  <Target Name="RecordDn2CppProjectOutput" AfterTargets="Build"
+          Condition="'$(IsEditorOnly)' != 'true' and '$(IsRoslynComponent)' != 'true' and '$(TargetFramework)' != ''">
+    <Error Condition="'$(Dn2CppProjectOutputRecords)' == ''" Text="Missing native project output record directory." />
+    <PropertyGroup>
+      <_Dn2CppRecord>$(Dn2CppProjectOutputRecords)/$(AssemblyName).$(TargetFramework).$([MSBuild]::StableStringHash($(MSBuildProjectFullPath))).txt</_Dn2CppRecord>
+    </PropertyGroup>
+    <ReadLinesFromFile File="$(_Dn2CppRecord)" Condition="Exists('$(_Dn2CppRecord)')">
+      <Output TaskParameter="Lines" ItemName="_Dn2CppExistingRecord" />
+    </ReadLinesFromFile>
+    <Error Condition="Exists('$(_Dn2CppRecord)') and '@(_Dn2CppExistingRecord)' != '$(TargetFileName);$(MSBuildProjectFullPath)'"
+           Text="Native project output record identity collision." />
+    <WriteLinesToFile File="$(_Dn2CppRecord)"
+                      Lines="$(TargetFileName);$(MSBuildProjectFullPath)" Overwrite="true" />
+  </Target>
+</Project>

@@ -8,11 +8,28 @@ DECLARE_UNREALSHARP_BINDER(Bind_UCoreUObject)
 	UField* GetNativeField(const char* InAssemblyName, const char* InNamespace, const char* InTypeName, ECSFieldType InFieldType)
 	{
 		TRACE_CPUPROFILER_EVENT_SCOPE(Bind_UCoreUObject::GetType);
+		if (!InAssemblyName || !InTypeName)
+		{
+			UE_LOGFMT(LogUnrealSharp, Error, "GetNativeField requires assembly and type names");
+			return nullptr;
+		}
 		UCSManagedAssembly* Assembly = UCSManager::Get().FindOrLoadAssembly(InAssemblyName);
-		ensure(Assembly);
+		if (!IsValid(Assembly))
+		{
+			const FString AssemblyName = UTF8_TO_TCHAR(InAssemblyName);
+			const FString Namespace = InNamespace ? UTF8_TO_TCHAR(InNamespace) : TEXT("<null>");
+			const FString TypeName = UTF8_TO_TCHAR(InTypeName);
+			UE_LOGFMT(LogUnrealSharp, Error, "GetNativeField could not load assembly={0} namespace={1} type={2}", AssemblyName, Namespace, TypeName);
+			return nullptr;
+		}
 
 		FCSFieldName FieldName(InTypeName, FCSNamespace(InNamespace), InAssemblyName, InFieldType);
 		TSharedPtr<FCSManagedTypeDefinition> ManagedTypeDefinition = Assembly->FindOrAddManagedTypeDefinition(FieldName);
+		if (!ManagedTypeDefinition.IsValid())
+		{
+			UE_LOGFMT(LogUnrealSharp, Error, "GetNativeField could not resolve managed type definition");
+			return nullptr;
+		}
 		UField* Field = ManagedTypeDefinition->GetDefinition();
 
 	#if WITH_EDITOR

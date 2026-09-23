@@ -1,4 +1,4 @@
-﻿using System.Reflection;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.Loader;
 using UnrealSharp.Core;
@@ -11,11 +11,14 @@ public class Plugin
     public readonly AssemblyName AssemblyName;
     public WeakReference? Assembly { get; private set; }
     
+#if !DN2CPP
     private AssemblyLoadContext? _loadContext;
+#endif
 
     private readonly List<IModuleInterface> _moduleInterfaces = new();
     private readonly List<Func<IModuleInterface>> _moduleInitFunctions = new();
     
+#if !DN2CPP
     public Plugin(AssemblyName assemblyName, bool isCollectible, string assemblyPath)
     {
         AssemblyName = assemblyName;
@@ -43,11 +46,21 @@ public class Plugin
         }
     }
 
+#endif
+#if DN2CPP
+    internal Plugin(Assembly assembly)
+    {
+        AssemblyName = assembly.GetName();
+        Assembly = new WeakReference(assembly);
+    }
+#endif
+
     public void AddModuleInterfaceInit(Func<IModuleInterface> initFunction)
     {
         _moduleInitFunctions.Add(initFunction);
     }
 
+#if !DN2CPP
     public bool Load()
     {
         if (_loadContext == null || Assembly != null)
@@ -64,6 +77,7 @@ public class Plugin
         return true;
     }
     
+#endif
     public T GetModule<T>() where T : class, IModuleInterface
     {
         T? module = _moduleInterfaces.OfType<T>().FirstOrDefault();
@@ -76,6 +90,7 @@ public class Plugin
         return module;
     }
 
+#if !DN2CPP
     [MethodImpl(MethodImplOptions.NoInlining)]
     public WeakReference Unload()
     {
@@ -92,6 +107,7 @@ public class Plugin
         return loadContextWeak;
     }
 
+#endif
     public void StartupModule()
     {
         _moduleInterfaces.Capacity = _moduleInitFunctions.Count;

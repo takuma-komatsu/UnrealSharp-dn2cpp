@@ -1,4 +1,4 @@
-﻿#include "UnrealSharpEditor.h"
+#include "UnrealSharpEditor.h"
 #include "AssetToolsModule.h"
 #include "CSBuildActionUtilities.h"
 #include "CSBuildUtilties.h"
@@ -468,6 +468,17 @@ void FUnrealSharpEditorModule::PackageProject()
 		return;
 	}
 
+#if PLATFORM_MAC
+    FString AppBundle = ArchiveDirectory.EndsWith(TEXT(".app")) ? ArchiveDirectory : ArchiveDirectory / (FString(FApp::GetProjectName()) + TEXT(".app"));
+    if (!FPaths::DirectoryExists(AppBundle))
+        AppBundle = ArchiveDirectory / TEXT("Mac") / (FString(FApp::GetProjectName()) + TEXT(".app"));
+    FString PackageRoot = AppBundle / TEXT("Contents/UE") / FApp::GetProjectName();
+    if (!FPaths::DirectoryExists(PackageRoot))
+    {
+        FMessageDialog::Open(EAppMsgType::Ok, FText::FromString(TEXT("Select the packaged Mac application or its parent directory.")));
+        return;
+    }
+#else
 	FString ExecutablePath = ArchiveDirectory / FApp::GetProjectName() + TEXT(".exe");
 	if (!FPaths::FileExists(ExecutablePath))
 	{
@@ -476,10 +487,17 @@ void FUnrealSharpEditorModule::PackageProject()
 		return;
 	}
 	
+    FString PackageRoot = FPaths::Combine(ArchiveDirectory, FApp::GetProjectName());
+#endif
+
 	const UProjectPackagingSettings* PlatformsPackagingSettings = GetDefault<UProjectPackagingSettings>();
 	
 	TMap<FString, FString> Arguments;
-	Arguments.Add(TEXT("ArchiveDirectory"), UnrealSharp::Paths::MakeQuotedPath(FPaths::Combine(ArchiveDirectory, FApp::GetProjectName())));
+	Arguments.Add(TEXT("ArchiveDirectory"), UnrealSharp::Paths::MakeQuotedPath(PackageRoot));
+#if PLATFORM_MAC
+    Arguments.Add(TEXT("TargetPlatform"), TEXT("Mac"));
+    Arguments.Add(TEXT("TargetArchitecture"), TEXT("arm64"));
+#endif
 	
 	int32 BuildConfigValue = static_cast<int32>(PlatformsPackagingSettings->BuildConfiguration);
 	UProjectPackagingSettings::FConfigurationInfo ConfigurationInfo = UProjectPackagingSettings::ConfigurationInfo[BuildConfigValue];

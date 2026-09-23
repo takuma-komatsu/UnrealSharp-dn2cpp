@@ -36,7 +36,12 @@ public static class DotNetSdkUtilities
             return "linux";
         }
 
-        throw new NotSupportedException($"Unsupported target platform for .NET publish: '{platform}'. " + $"Supported platforms: Win64, Mac, Linux, LinuxArm64.");
+        if (platform == UnrealTargetPlatform.Android)
+        {
+            return "android";
+        }
+
+        throw new NotSupportedException($"Unsupported target platform for .NET publish: '{platform}'. " + $"Supported platforms: Win64, Mac, Linux, LinuxArm64, Android.");
     }
 
     public static string GetArchitectureIdentifier(UnrealArch architecture)

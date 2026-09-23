@@ -1,3 +1,4 @@
+#if !DN2CPP
 using System.Collections.Concurrent;
 using System.Reflection;
 using System.Runtime.CompilerServices;
@@ -109,3 +110,4 @@ public static class GCHandleUtilities
         return (T?)subObject;
     }
 }
+#endif

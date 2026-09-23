@@ -26,7 +26,7 @@ struct FCSMetaDataEntry : FCSReflectionDataBase
 
 struct FCSTypeReferenceReflectionData : FCSReflectionDataBase
 {
-	void SerializeFromJsonString(TCHAR* RawJsonString);
+	void SerializeFromJsonString(const TCHAR* RawJsonString);
 	
 	// FCSReflectionDataBase interface
 	virtual bool Serialize(FConstObject JsonObject) override;

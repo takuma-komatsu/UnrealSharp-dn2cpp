@@ -13,7 +13,7 @@ namespace UnrealSharp::RapidJson
 	using FConstObject = FValue::ConstObject;
 	using FConstArray = FValue::ConstArray;
 
-	UNREALSHARPUTILITIES_API bool ParseJsonString(TCHAR* JsonText, FDocument& OutDocument);
+	UNREALSHARPUTILITIES_API bool ParseJsonString(const TCHAR* JsonText, FDocument& OutDocument);
 	UNREALSHARPUTILITIES_API TOptional<FConstObject> GetRootObject(const FDocument& Document);
 
 	UNREALSHARPUTILITIES_API TOptional<FValue::ConstMemberIterator> FindMember(const FConstObject& Object, FStringView FieldName);

@@ -1,18 +1,10 @@
-﻿#include "UnrealSharpCore.h"
+#include "UnrealSharpCore.h"
 #include "CoreMinimal.h"
 #include "CSManager.h"
 #include "CSDotnetUtilties.h"
 #include "Properties/CSPropertyGeneratorManager.h"
 #include "Modules/ModuleManager.h"
-
-#if defined(__APPLE__)
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wpragma-once-outside-header"
-#endif
-#pragma once
-#if defined(__APPLE__)
-#pragma clang diagnostic pop
-#endif
+#include "Misc/CoreDelegates.h"
 
 #define LOCTEXT_NAMESPACE "FUnrealSharpCoreModule"
 
@@ -23,21 +15,31 @@ void FUnrealSharpCoreModule::StartupModule()
 #if WITH_EDITOR
 	if (!UnrealSharp::DotNetUtilities::VerifyCSharpEnvironment() || !UnrealSharp::DotNetUtilities::BuildUserSolution())
 	{
-		StartupModule();
 		return;
 	}
 #endif
 	
 	if (!DotNetRuntimeHost.InitializeManagedRuntime())
 	{
+        if (DotNetRuntimeHost.IsNativeRuntime())
+        {
+            UE_LOG(LogUnrealSharp, Fatal, TEXT("The selected dn2cpp runtime failed to initialize."));
+        }
 		return;
 	}
 	
+    FCoreDelegates::OnPreExit.AddRaw(&DotNetRuntimeHost, &FCSDotNetRuntimeHost::ShutdownManagedRuntime);
 	UCSManager::Get().Initialize();
+    if (!DotNetRuntimeHost.CompleteNativeStartup())
+    {
+        UE_LOG(LogUnrealSharp, Fatal, TEXT("The dn2cpp assembly registry is incomplete. Check the packaged load-order manifests."));
+    }
 }
 
 void FUnrealSharpCoreModule::ShutdownModule()
 {
+    FCoreDelegates::OnPreExit.RemoveAll(&DotNetRuntimeHost);
+    DotNetRuntimeHost.ShutdownManagedRuntime();
 	FCSPropertyGeneratorManager::Shutdown();
 }
 

@@ -12,11 +12,15 @@ struct FCSManagedPluginCallbacks;
 
 struct FCSInitializationResult
 {
-	bool bSuccess = false;
-	const TCHAR* Message = nullptr;
+	uint8 bSuccess = 0;
+	UTF8CHAR Message[4096] = {};
 };
 
+static_assert(sizeof(FCSInitializationResult) == 4097);
+static_assert(offsetof(FCSInitializationResult, Message) == 1);
+
 using FInitializeUnrealSharp = void (*)(const UTF8CHAR*, FCSManagedPluginCallbacks*, const void*, FCSManagedCallbacks*, FCSInitializationResult*);
+using FShutdownUnrealSharp = void (*)(FCSInitializationResult*);
 
 struct FCSDotNetLayout
 {
@@ -38,7 +42,11 @@ public:
 	FCSDotNetRuntimeHost() = default;
 	~FCSDotNetRuntimeHost();
 
+	static bool UsesDn2Cpp();
+	bool IsNativeRuntime() const { return bNativeRuntime; }
+	static bool RegisterNativeAssembly(const FString& Name);
 	bool InitializeManagedRuntime();
+	bool CompleteNativeStartup();
 	void ShutdownManagedRuntime();
 
 private:
@@ -59,5 +67,7 @@ private:
 	hostfxr_get_runtime_delegate_fn Hostfxr_GetRuntimeDelegate = nullptr;
 	hostfxr_close_fn Hostfxr_Close = nullptr;
 
+	FShutdownUnrealSharp ShutdownUnrealSharp = nullptr;
+	bool bNativeRuntime = false;
 	void* RuntimeHost = nullptr;
 };

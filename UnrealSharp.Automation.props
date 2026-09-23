@@ -1,17 +1,12 @@
 <Project>
-    <PropertyGroup>
-        <UE5RulesProjPath>$(EngineDir)\Intermediate\Build\BuildRulesProjects\UE5Rules\UE5Rules.csproj</UE5RulesProjPath>
-    </PropertyGroup>
-
-    <PropertyGroup Condition="Exists('$(UE5RulesProjPath)')">
-        <UE5RulesContent>$([System.IO.File]::ReadAllText('$(UE5RulesProjPath)'))</UE5RulesContent>
-        <UE5Rules_DefineConstants>$([System.Text.RegularExpressions.Regex]::Match($(UE5RulesContent), '&lt;DefineConstants&gt;(?&lt;content&gt;.*?)&lt;/DefineConstants&gt;').Groups['content'].Value)</UE5Rules_DefineConstants>
-        <UE5Rules_DefineConstants>$([System.Text.RegularExpressions.Regex]::Replace($(UE5Rules_DefineConstants), '\s+', ''))</UE5Rules_DefineConstants>
+    <PropertyGroup Condition="Exists('$(EngineDir)/Build/Build.version')">
+        <UEBuildVersion>$([System.IO.File]::ReadAllText('$(EngineDir)/Build/Build.version'))</UEBuildVersion>
+        <UEBuildMajorVersion>$([System.Text.RegularExpressions.Regex]::Match($(UEBuildVersion), '&quot;MajorVersion&quot;\s*:\s*(\d+)').Groups[1].Value)</UEBuildMajorVersion>
+        <UEBuildMinorVersion>$([System.Text.RegularExpressions.Regex]::Match($(UEBuildVersion), '&quot;MinorVersion&quot;\s*:\s*(\d+)').Groups[1].Value)</UEBuildMinorVersion>
     </PropertyGroup>
 
     <PropertyGroup>
         <TargetFramework>net8.0</TargetFramework>
-        <TargetFramework Condition="$(UE5Rules_DefineConstants.Contains('UE_5_8_OR_LATER'))">net10.0</TargetFramework>
+        <TargetFramework Condition="'$(UEBuildMajorVersion)' != '' and '$(UEBuildMinorVersion)' != '' and ($(UEBuildMajorVersion) &gt; 5 or ($(UEBuildMajorVersion) == 5 and $(UEBuildMinorVersion) &gt;= 8))">net10.0</TargetFramework>
     </PropertyGroup>
-    
 </Project>

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root xmlns:android="http://schemas.android.com/apk/res/android">
+    <resourceCopies>
+        <isArch arch="arm64-v8a">
+            <copyFile src="$S(ProjectDir)/Intermediate/UnrealSharp/NativeStage/Android/$S(Configuration)/Binaries/Android/arm64-v8a/libUnrealSharpGame.so"
+                      dst="$S(BuildDir)/libs/arm64-v8a/libUnrealSharpGame.so" />
+        </isArch>
+    </resourceCopies>
+</root>

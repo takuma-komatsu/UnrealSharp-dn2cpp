@@ -44,7 +44,11 @@ FString UnrealSharp::Paths::GetUnrealSharpBuildToolPath()
 
 FString UnrealSharp::Paths::GetUserAssemblyDirectory()
 {
+#if PLATFORM_ANDROID && !WITH_EDITOR
+    return FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectContentDir(), TEXT("Dn2Cpp/Managed"), TEXT(DOTNET_DISPLAY_NAME)));
+#else
     return FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectDir(), DotNetUtilities::GetManagedBinaries()));
+#endif
 }
 
 FString UnrealSharp::Paths::GetUnrealSharpMetadataPath()

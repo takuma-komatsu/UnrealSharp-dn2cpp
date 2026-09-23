@@ -1,4 +1,4 @@
-﻿#include "CSManagedAssembly.h"
+#include "CSManagedAssembly.h"
 
 #include "CSManagedPluginCallbacks.h"
 #include "UnrealSharpCore.h"
@@ -44,13 +44,18 @@ bool UCSManagedAssembly::LoadAssembly()
 		return true;
 	}
 
-	if (!FPaths::FileExists(AssemblyFilePath))
+	if (!FCSDotNetRuntimeHost::UsesDn2Cpp() && !FPaths::FileExists(AssemblyFilePath))
 	{
 		UE_LOGFMT(LogUnrealSharp, Error, "Assembly path does not exist: {0}", AssemblyFilePath);
 		return false;
 	}
 
 	bIsLoading = true;
+    if (FCSDotNetRuntimeHost::UsesDn2Cpp() && !FCSDotNetRuntimeHost::RegisterNativeAssembly(FPaths::GetBaseFilename(AssemblyFilePath)))
+    {
+        bIsLoading = false;
+        return false;
+    }
 
 	FGCHandle NewAssemblyGCHandle = GetManagedPluginCallbacks().LoadPlugin(*AssemblyFilePath, bIsCollectible);
 

@@ -280,7 +280,11 @@ public sealed class UnrealSynchronizationContext : SynchronizationContext
             return;
         }
         
+#if DN2CPP
+        GCHandle callbackHandle = GCHandleUtilities.AllocateStrongPointer(callback, typeof(UnrealSynchronizationContext).Assembly);
+#else
         GCHandle callbackHandle = GCHandle.Alloc(callback);
+#endif
         Bind_Async.CallRunOnThread(worldContextObject.Data, (int) thread, GCHandle.ToIntPtr(callbackHandle));
     }
 }
